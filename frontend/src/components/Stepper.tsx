@@ -24,8 +24,12 @@ export const STATUS_ORDER: ProjectStatus[] = [
   'DONE',
 ];
 
-export function getStatusIndex(status: ProjectStatus): number {
-  return STATUS_ORDER.indexOf(status);
+export function getStatusIndex(status: ProjectStatus | number | string): number {
+  if (typeof status === 'number') {
+    return Math.max(0, Math.min(status, STATUS_ORDER.length - 1));
+  }
+  const idx = STATUS_ORDER.indexOf(status as ProjectStatus);
+  return idx >= 0 ? idx : 0;
 }
 
 interface StepperProps {
