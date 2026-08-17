@@ -9,6 +9,31 @@ using Studio.Api.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load .env file from workspace root or current directory if present
+var envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", ".env");
+if (!File.Exists(envPath))
+{
+    envPath = Path.Combine(builder.Environment.ContentRootPath, ".env");
+}
+if (!File.Exists(envPath))
+{
+    envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+}
+
+if (File.Exists(envPath))
+{
+    foreach (var line in File.ReadAllLines(envPath))
+    {
+        var trimmed = line.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#")) continue;
+        var parts = trimmed.Split('=', 2);
+        if (parts.Length == 2)
+        {
+            Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
+        }
+    }
+}
+
 // 1. Database & SQLite Directory
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=data/studio.db";
 

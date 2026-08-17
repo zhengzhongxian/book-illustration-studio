@@ -7,6 +7,10 @@ Book_illustration.ipynb
 .env
 .env.local
 *.env
+appsettings.Local.json
+appsettings.Development.json
+backend/src/Studio.Api/appsettings.Local.json
+backend/src/Studio.Api/appsettings.Development.json
 
 # Backend .NET Build & Artifacts
 bin/
