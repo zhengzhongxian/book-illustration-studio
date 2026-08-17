@@ -31,7 +31,7 @@ public class LocalStorageService : ILocalStorageService
         var folder = Path.Combine(_storageRoot, subfolder);
         Directory.CreateDirectory(folder);
 
-        var ext = mimeType.Contains("jpeg") || mimeType.Contains("jpg") ? ".jpg" : ".png";
+        var ext = mimeType.Contains("svg") ? ".svg" : (mimeType.Contains("jpeg") || mimeType.Contains("jpg") ? ".jpg" : ".png");
         var fileName = $"{fileNameWithoutExt}{ext}";
         var fullPath = Path.Combine(folder, fileName);
 
@@ -47,7 +47,7 @@ public class LocalStorageService : ILocalStorageService
         if (!File.Exists(fullPath)) return null;
 
         var ext = Path.GetExtension(fullPath).ToLowerInvariant();
-        var contentType = ext == ".jpg" || ext == ".jpeg" ? "image/jpeg" : "image/png";
+        var contentType = ext == ".svg" ? "image/svg+xml" : (ext == ".jpg" || ext == ".jpeg" ? "image/jpeg" : "image/png");
 
         var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         return (stream, contentType);
