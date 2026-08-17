@@ -241,8 +241,8 @@ public class GeminiRestClient : IGeminiClient
 
     private async Task<string> CallTextModelAsync(GeminiGenerateRequest request, CancellationToken ct)
     {
-        var configured = string.IsNullOrWhiteSpace(_options.TextModel) ? "gemini-2.0-flash" : _options.TextModel;
-        var candidateModels = new[] { configured, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.7-flash", "gemini-2.5-flash" }
+        var configured = string.IsNullOrWhiteSpace(_options.TextModel) ? "gemini-2.5-flash" : _options.TextModel;
+        var candidateModels = new[] { configured, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.7-flash" }
             .Distinct()
             .ToList();
 
@@ -254,6 +254,8 @@ public class GeminiRestClient : IGeminiClient
         {
             var url = $"{_options.BaseUrl}models/{model}:generateContent?key={_options.ApiKey}";
             var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var maskedKey = string.IsNullOrEmpty(_options.ApiKey) ? "EMPTY" : $"{_options.ApiKey[..Math.Min(8, _options.ApiKey.Length)]}...{_options.ApiKey[^Math.Min(4, _options.ApiKey.Length)..]}";
+            _logger.LogInformation("Sending request to Gemini Text model '{Model}' with API key '{MaskedKey}'", model, maskedKey);
 
             try
             {
@@ -274,10 +276,13 @@ public class GeminiRestClient : IGeminiClient
                 lastError = ExtractErrorMessage(respContent);
                 lastStatusCode = (int)response.StatusCode;
 
-                // If model is deprecated / not found, try next candidate model
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound || respContent.Contains("no longer available"))
+                // If model is deprecated, not found, or experiencing high demand (503), try next candidate model
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound ||
+                    response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable ||
+                    respContent.Contains("no longer available") ||
+                    respContent.Contains("high demand"))
                 {
-                    _logger.LogInformation("Model '{Model}' not available, trying next candidate...", model);
+                    _logger.LogInformation("Model '{Model}' busy/unavailable ({StatusCode}), trying next candidate...", model, response.StatusCode);
                     continue;
                 }
 

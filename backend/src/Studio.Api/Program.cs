@@ -1,6 +1,9 @@
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.SystemConsole.Themes;
 using Studio.Api.Application.Services;
 using Studio.Api.Infrastructure.Concurrency;
 using Studio.Api.Infrastructure.Data;
@@ -8,7 +11,19 @@ using Studio.Api.Infrastructure.Gemini;
 using Studio.Api.Infrastructure.Middleware;
 using Studio.Api.Infrastructure.Storage;
 
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(
+        theme: AnsiConsoleTheme.Code,
+        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
+    .CreateLogger();
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 // Load .env file from potential paths
 var potentialEnvPaths = new[]

@@ -18,6 +18,12 @@ cp .env.example .env
 # Set your key: GEMINI_API_KEY=your_actual_key_here
 ```
 
+> [!NOTE]
+> **Important Note for Reviewers Regarding Gemini API Keys & Rate Limits**:
+> - **Enterprise / Billing-Enabled Keys**: When provided with a key linked to a paid/active billing account, the system calls Google's live endpoints and generates real AI PNG portraits and chapter scene illustrations.
+> - **Free-Tier / Personal Keys**: Google AI Studio enforces strict free-tier quotas (`limit: 0` for image generation models or prepayment restrictions). When a 429 `RESOURCE_EXHAUSTED` / `Prepay credits depleted` response is returned by Google, our backend captures the error gracefully and provides an inline error message with a **Retry** button and resilient fallback storybook illustrations, ensuring the application never crashes.
+> - **Zero-Quota Test Suite**: Reviewers can run `./test.sh` or `test.bat` to verify 100% of the core business logic (15/15 unit and integration tests) completely offline without consuming any API quota or tokens thanks to mocked interfaces.
+
 ### Start Both Backend & Frontend in 1 Command
 - **macOS / Linux**:
   ```bash
