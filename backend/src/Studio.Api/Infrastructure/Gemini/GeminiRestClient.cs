@@ -1,8 +1,8 @@
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
+using Studio.Api.Application.Common.Exceptions;
+using Studio.Api.Application.Common.Helpers;
 
 namespace Studio.Api.Infrastructure.Gemini;
 
@@ -11,11 +11,6 @@ public class GeminiRestClient : IGeminiClient
     private readonly HttpClient _httpClient;
     private readonly GeminiOptions _options;
     private readonly ILogger<GeminiRestClient> _logger;
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
 
     public const string SystemNegativeInstructions =
         "There must be no text on the image, it should not look like a cover page. " +
@@ -96,14 +91,14 @@ public class GeminiRestClient : IGeminiClient
 
         try
         {
-            var characters = JsonSerializer.Deserialize<List<ExtractedCharacter>>(jsonText, JsonOptions) ?? new();
-            // Strict server-side cap: Maximum 2 characters
+            var characters = JsonHelper.Deserialize<List<ExtractedCharacter>>(jsonText) ?? new();
+            // Strict server-side cap: Maximum 2 adult characters
             return characters.Take(2).ToList();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to parse characters JSON: {Json}", jsonText);
-            throw new InvalidOperationException($"Model returned invalid characters JSON format: {ex.Message}");
+            throw new GeminiApiException($"Model returned invalid characters JSON format: {ex.Message}");
         }
     }
 
@@ -181,14 +176,14 @@ public class GeminiRestClient : IGeminiClient
 
         try
         {
-            var chapters = JsonSerializer.Deserialize<List<ExtractedChapter>>(jsonText, JsonOptions) ?? new();
+            var chapters = JsonHelper.Deserialize<List<ExtractedChapter>>(jsonText) ?? new();
             // Strict server-side cap: Maximum 1 chapter
             return chapters.Take(1).ToList();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to parse chapters JSON: {Json}", jsonText);
-            throw new InvalidOperationException($"Model returned invalid chapters JSON format: {ex.Message}");
+            throw new GeminiApiException($"Model returned invalid chapters JSON format: {ex.Message}");
         }
     }
 
@@ -249,7 +244,7 @@ public class GeminiRestClient : IGeminiClient
         var model = string.IsNullOrWhiteSpace(_options.TextModel) ? "gemini-2.5-flash" : _options.TextModel;
         var url = $"{_options.BaseUrl}models/{model}:generateContent?key={_options.ApiKey}";
 
-        var json = JsonSerializer.Serialize(request, JsonOptions);
+        var json = JsonHelper.Serialize(request);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await _httpClient.PostAsync(url, content, ct);
@@ -258,15 +253,15 @@ public class GeminiRestClient : IGeminiClient
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogError("Gemini Text API error ({StatusCode}): {Body}", response.StatusCode, respContent);
-            throw new HttpRequestException($"Gemini API error ({response.StatusCode}): {ExtractErrorMessage(respContent)}");
+            throw new GeminiApiException($"Gemini API error ({response.StatusCode}): {ExtractErrorMessage(respContent)}", response.StatusCode);
         }
 
-        var result = JsonSerializer.Deserialize<GeminiGenerateResponse>(respContent, JsonOptions);
+        var result = JsonHelper.Deserialize<GeminiGenerateResponse>(respContent);
         var text = result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            throw new InvalidOperationException("Gemini returned an empty response.");
+            throw new GeminiApiException("Gemini returned an empty response.");
         }
 
         return text;
@@ -277,7 +272,7 @@ public class GeminiRestClient : IGeminiClient
         var model = string.IsNullOrWhiteSpace(_options.ImageModel) ? "gemini-2.5-flash-image" : _options.ImageModel;
         var url = $"{_options.BaseUrl}models/{model}:generateContent?key={_options.ApiKey}";
 
-        var json = JsonSerializer.Serialize(request, JsonOptions);
+        var json = JsonHelper.Serialize(request);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await _httpClient.PostAsync(url, content, ct);
@@ -286,15 +281,15 @@ public class GeminiRestClient : IGeminiClient
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogError("Gemini Image API error ({StatusCode}): {Body}", response.StatusCode, respContent);
-            throw new HttpRequestException($"Gemini Image API error ({response.StatusCode}): {ExtractErrorMessage(respContent)}");
+            throw new GeminiApiException($"Gemini Image API error ({response.StatusCode}): {ExtractErrorMessage(respContent)}", response.StatusCode);
         }
 
-        var result = JsonSerializer.Deserialize<GeminiGenerateResponse>(respContent, JsonOptions);
+        var result = JsonHelper.Deserialize<GeminiGenerateResponse>(respContent);
         var inlineData = result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault(p => p.InlineData != null)?.InlineData;
 
         if (inlineData == null || string.IsNullOrWhiteSpace(inlineData.Data))
         {
-            throw new InvalidOperationException("Gemini did not return image data.");
+            throw new GeminiApiException("Gemini did not return image data.");
         }
 
         return (inlineData.Data, inlineData.MimeType ?? "image/png");
@@ -304,7 +299,7 @@ public class GeminiRestClient : IGeminiClient
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey) || _options.ApiKey.Contains("YOUR_GEMINI_API_KEY"))
         {
-            throw new InvalidOperationException("Gemini API Key is not configured. Please set 'Gemini:ApiKey' in appsettings.json or 'GEMINI_API_KEY' environment variable.");
+            throw new ValidationException("Gemini API Key is not configured. Please set 'Gemini:ApiKey' in appsettings.json or 'GEMINI_API_KEY' environment variable.");
         }
     }
 
@@ -318,7 +313,7 @@ public class GeminiRestClient : IGeminiClient
     {
         try
         {
-            var err = JsonSerializer.Deserialize<GeminiGenerateResponse>(respContent, JsonOptions);
+            var err = JsonHelper.Deserialize<GeminiGenerateResponse>(respContent);
             if (!string.IsNullOrWhiteSpace(err?.Error?.Message)) return err.Error.Message;
         }
         catch { }
