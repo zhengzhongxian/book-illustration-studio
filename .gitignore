@@ -1,0 +1,39 @@
+# Specification and Reference Files (keep local, ignore from git repo)
+app-demo.html
+gradion-assessment-intern-software-engineer.md
+Book_illustration.ipynb
+
+# Environment & Secrets
+.env
+.env.local
+*.env
+
+# Backend .NET Build & Artifacts
+bin/
+obj/
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+.vscode/
+
+# SQLite Database & Uploads Storage
+backend/src/Studio.Api/data/
+backend/src/Studio.Api/storage/
+*.db
+*.db-shm
+*.db-wal
+
+# Frontend Node & Vite Build
+node_modules/
+dist/
+dist-ssr/
+*.local
+.npm
+.eslintcache
+
+# OS & Logs
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+*.log
