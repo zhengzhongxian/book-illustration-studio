@@ -241,69 +241,110 @@ public class GeminiRestClient : IGeminiClient
 
     private async Task<string> CallTextModelAsync(GeminiGenerateRequest request, CancellationToken ct)
     {
-        var model = string.IsNullOrWhiteSpace(_options.TextModel) ? "gemini-2.5-flash" : _options.TextModel;
-        var url = $"{_options.BaseUrl}models/{model}:generateContent?key={_options.ApiKey}";
+        var configured = string.IsNullOrWhiteSpace(_options.TextModel) ? "gemini-2.0-flash" : _options.TextModel;
+        var candidateModels = new[] { configured, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.7-flash", "gemini-2.5-flash" }
+            .Distinct()
+            .ToList();
 
         var json = JsonHelper.Serialize(request);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        string lastError = string.Empty;
+        int lastStatusCode = 400;
 
-        var response = await _httpClient.PostAsync(url, content, ct);
-        var respContent = await response.Content.ReadAsStringAsync(ct);
-
-        if (!response.IsSuccessStatusCode)
+        foreach (var model in candidateModels)
         {
-            _logger.LogError("Gemini Text API error ({StatusCode}): {Body}", response.StatusCode, respContent);
-            throw new GeminiApiException($"Gemini API error ({response.StatusCode}): {ExtractErrorMessage(respContent)}", response.StatusCode);
+            var url = $"{_options.BaseUrl}models/{model}:generateContent?key={_options.ApiKey}";
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            try
+            {
+                var response = await _httpClient.PostAsync(url, content, ct);
+                var respContent = await response.Content.ReadAsStringAsync(ct);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = JsonHelper.Deserialize<GeminiGenerateResponse>(respContent);
+                    var text = result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
+
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        return text;
+                    }
+                }
+
+                lastError = ExtractErrorMessage(respContent);
+                lastStatusCode = (int)response.StatusCode;
+
+                // If model is deprecated / not found, try next candidate model
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound || respContent.Contains("no longer available"))
+                {
+                    _logger.LogInformation("Model '{Model}' not available, trying next candidate...", model);
+                    continue;
+                }
+
+                _logger.LogError("Gemini Text API error ({StatusCode}): {Body}", response.StatusCode, respContent);
+                throw new GeminiApiException($"Gemini API error ({response.StatusCode}): {lastError}", response.StatusCode);
+            }
+            catch (GeminiApiException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed calling model {Model}", model);
+                lastError = ex.Message;
+            }
         }
 
-        var result = JsonHelper.Deserialize<GeminiGenerateResponse>(respContent);
-        var text = result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
-
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            throw new GeminiApiException("Gemini returned an empty response.");
-        }
-
-        return text;
+        throw new GeminiApiException($"Gemini API error ({lastStatusCode}): {lastError}", (System.Net.HttpStatusCode)lastStatusCode);
     }
 
     private async Task<(string Base64Data, string MimeType)> CallImageModelAsync(GeminiGenerateRequest request, CancellationToken ct)
     {
-        var model = string.IsNullOrWhiteSpace(_options.ImageModel) ? "gemini-2.5-flash-image" : _options.ImageModel;
-        var url = $"{_options.BaseUrl}models/{model}:generateContent?key={_options.ApiKey}";
+        var configured = string.IsNullOrWhiteSpace(_options.ImageModel) ? "gemini-2.0-flash" : _options.ImageModel;
+        var candidateModels = new[] { configured, "gemini-2.0-flash", "gemini-3.1-flash-lite-image", "gemini-2.5-flash-image" }
+            .Distinct()
+            .ToList();
 
         var json = JsonHelper.Serialize(request);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        try
+        foreach (var model in candidateModels)
         {
-            var response = await _httpClient.PostAsync(url, content, ct);
-            var respContent = await response.Content.ReadAsStringAsync(ct);
+            var url = $"{_options.BaseUrl}models/{model}:generateContent?key={_options.ApiKey}";
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var result = JsonHelper.Deserialize<GeminiGenerateResponse>(respContent);
-                var inlineData = result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault(p => p.InlineData != null)?.InlineData;
+                var response = await _httpClient.PostAsync(url, content, ct);
+                var respContent = await response.Content.ReadAsStringAsync(ct);
 
-                if (inlineData != null && !string.IsNullOrWhiteSpace(inlineData.Data))
+                if (response.IsSuccessStatusCode)
                 {
-                    return (inlineData.Data, inlineData.MimeType ?? "image/png");
+                    var result = JsonHelper.Deserialize<GeminiGenerateResponse>(respContent);
+                    var inlineData = result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault(p => p.InlineData != null)?.InlineData;
+
+                    if (inlineData != null && !string.IsNullOrWhiteSpace(inlineData.Data))
+                    {
+                        return (inlineData.Data, inlineData.MimeType ?? "image/png");
+                    }
                 }
+
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound || respContent.Contains("no longer available"))
+                {
+                    _logger.LogInformation("Image model '{Model}' not available, trying next...", model);
+                    continue;
+                }
+
+                _logger.LogWarning("Gemini Image API ({StatusCode}): {Body}. Using resilient storybook illustration fallback.", response.StatusCode, respContent);
             }
-
-            _logger.LogWarning("Gemini Image API ({StatusCode}): {Body}. Using resilient storybook illustration fallback.", response.StatusCode, respContent);
-
-            // If free tier account has quota 0 for image generation (429/403/billing restriction),
-            // gracefully generate a storybook SVG image so the pipeline can complete seamlessly.
-            var promptText = request.Contents.FirstOrDefault()?.Parts.FirstOrDefault()?.Text ?? "Book Illustration";
-            return GenerateFallbackIllustration(promptText);
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Gemini Image API network exception on model {Model}", model);
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Gemini Image API network exception. Falling back to local storybook illustration.");
-            var promptText = request.Contents.FirstOrDefault()?.Parts.FirstOrDefault()?.Text ?? "Book Illustration";
-            return GenerateFallbackIllustration(promptText);
-        }
+
+        // Resilient fallback if Google accounts have 0 quota for image models
+        var promptText = request.Contents.FirstOrDefault()?.Parts.FirstOrDefault()?.Text ?? "Book Illustration";
+        return GenerateFallbackIllustration(promptText);
     }
 
     private static (string Base64Data, string MimeType) GenerateFallbackIllustration(string prompt)
