@@ -254,8 +254,6 @@ public class GeminiRestClient : IGeminiClient
         {
             var url = $"{_options.BaseUrl}models/{model}:generateContent?key={_options.ApiKey}";
             var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var maskedKey = string.IsNullOrEmpty(_options.ApiKey) ? "EMPTY" : $"{_options.ApiKey[..Math.Min(8, _options.ApiKey.Length)]}...{_options.ApiKey[^Math.Min(4, _options.ApiKey.Length)..]}";
-            _logger.LogInformation("Sending request to Gemini Text model '{Model}' with API key '{MaskedKey}'", model, maskedKey);
 
             try
             {
@@ -276,13 +274,12 @@ public class GeminiRestClient : IGeminiClient
                 lastError = ExtractErrorMessage(respContent);
                 lastStatusCode = (int)response.StatusCode;
 
-                // If model is deprecated, not found, or experiencing high demand (503), try next candidate model
+                // If model is deprecated, not found, or experiencing high demand (503), try next candidate model silently
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound ||
                     response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable ||
                     respContent.Contains("no longer available") ||
                     respContent.Contains("high demand"))
                 {
-                    _logger.LogInformation("Model '{Model}' busy/unavailable ({StatusCode}), trying next candidate...", model, response.StatusCode);
                     continue;
                 }
 
