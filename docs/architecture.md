@@ -21,56 +21,51 @@ flowchart TD
 
 ## 2. Dual-Status State Machine
 
-To guarantee that mid-step refreshes, page reloads, and network interruptions are handled without losing data or causing stuck states, state is separated into **Milestone Status** and **Runtime Step State**.
+To guarantee that mid-step refreshes, page reloads, and network interruptions are handled without losing data or causing stuck states, state is tracked with **two independent flat fields** on each `Project` row:
+
+- **`Status`** (Milestone): Records the *last completed* pipeline step. Only advances forward on success.
+- **`StepState`** (Runtime): Records whether any step is *currently executing*. Resets on completion or failure.
+
+### Milestone Progression (`Project.Status`)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> CREATED
-
-    state CREATED {
-        [*] --> IDLE_0
-        IDLE_0 --> RUNNING_1: Start Step 1 (Style)
-        RUNNING_1 --> FAILED_1: API / Network Error
-        FAILED_1 --> RUNNING_1: User Retry Step 1
-        RUNNING_1 --> STYLE_SET: Success
-    }
-
-    state STYLE_SET {
-        [*] --> IDLE_1
-        IDLE_1 --> RUNNING_2: Start Step 2 (Characters)
-        RUNNING_2 --> FAILED_2: API / Validation Error
-        FAILED_2 --> RUNNING_2: User Retry Step 2
-        RUNNING_2 --> CHARACTERS_GENERATED: Success (Max 2)
-    }
-
-    state CHARACTERS_GENERATED {
-        [*] --> IDLE_2
-        IDLE_2 --> RUNNING_3: Start Step 3 (Portraits)
-        RUNNING_3 --> FAILED_3: Image API Error
-        FAILED_3 --> RUNNING_3: User Retry Step 3
-        RUNNING_3 --> PORTRAITS_GENERATED: Success
-    }
-
-    state PORTRAITS_GENERATED {
-        [*] --> IDLE_3
-        IDLE_3 --> RUNNING_4: Start Step 4 (Chapters)
-        RUNNING_4 --> FAILED_4: API Error
-        FAILED_4 --> RUNNING_4: User Retry Step 4
-        RUNNING_4 --> CHAPTERS_GENERATED: Success (Max 1)
-    }
-
-    state CHAPTERS_GENERATED {
-        [*] --> IDLE_4
-        IDLE_4 --> RUNNING_5: Start Step 5 (Illustrations)
-        RUNNING_5 --> FAILED_5: Multimodal Image Error
-        FAILED_5 --> RUNNING_5: User Retry Step 5
-        RUNNING_5 --> DONE: Success
-    }
-
-    state DONE {
-        [*] --> COMPLETED: View / Read Mode
-    }
+    [*] --> CREATED : Project created
+    CREATED --> STYLE_SET : Step 1 succeeds
+    STYLE_SET --> CHARACTERS_GENERATED : Step 2 succeeds (≤2 chars)
+    CHARACTERS_GENERATED --> PORTRAITS_GENERATED : Step 3 succeeds
+    PORTRAITS_GENERATED --> CHAPTERS_GENERATED : Step 4 succeeds (≤1 chapter)
+    CHAPTERS_GENERATED --> DONE : Step 5 succeeds
 ```
+
+### Runtime Execution Cycle (`Project.StepState`)
+
+Every step follows the same cycle — `StepState` is shared across all steps:
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> RUNNING : User triggers next step
+    RUNNING --> IDLE : Step succeeds (Status advances)
+    RUNNING --> FAILED : API / network error (Status unchanged)
+    FAILED --> RUNNING : User retries same step
+    RUNNING --> IDLE : Reset stuck step (manual recovery)
+
+    note right of RUNNING : StepStartedAt = UTC now\nLastError = null
+    note right of FAILED : LastError = error message\nStepStartedAt preserved
+    note right of IDLE : StepStartedAt = null
+```
+
+### How a Browser Refresh Reads State
+
+| `Status` | `StepState` | UI Interpretation |
+|:---|:---|:---|
+| `CHARACTERS_GENERATED` | `IDLE` | Step 2 done. Show "Generate Portraits" button. |
+| `CHARACTERS_GENERATED` | `RUNNING` | Step 3 in-flight. Show spinner + poll for portraits. |
+| `CHARACTERS_GENERATED` | `FAILED` | Step 3 failed. Show error + Retry button. |
+| `CHARACTERS_GENERATED` | `RUNNING` + stale `StepStartedAt` | Step 3 stuck (server died). Show recovery affordance. |
+```
+
 
 ---
 

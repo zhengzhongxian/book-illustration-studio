@@ -25,12 +25,14 @@
 ### Decision 5: Declining Redundant `UnitOfWork` & Generic Repository Wrappers
 - **Context & Proposal**: AI boilerplate scaffolding attempted to introduce `IUnitOfWork`, `IRepository<T>`, and multiple wrapper classes over EF Core.
 - **Pushback & Resolution**: I rejected this abstraction per §05 ("Keep it simple and lean. Do not over-engineer"). In EF Core, `DbContext` is already a Unit of Work and `DbSet<T>` is a Repository. Wrapping them adds artificial complexity, hides async LINQ capabilities, and offers zero testability benefit over EF Core's built-in In-Memory test provider.
+- **Cost & Trade-Off**: Services call `_db` directly, so switching to a different ORM later would touch every service. Acceptable at this scope — the wrappers would cost more to maintain than they save.
+
 ### Decision 6: Two-Tier Architecture for Live Gemini API & Graceful Degradation
 - **Context & Proposal**: AI initially proposed crashing or bubbling up raw HTTP 429 exceptions to the frontend whenever Google AI Studio rate-limits or returns `RESOURCE_EXHAUSTED` / `Prepay credits depleted`.
 - **Pushback & Resolution**: I pushed back. In a real-world production system, third-party API rate limits and regional billing tier quirks are inevitable. We architected a resilient two-tier design:
   1. *Live Tier*: Calls Google's official endpoints directly with current model candidates (`gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-flash`). If provided with a billing-enabled key, live AI outputs are generated.
-  2. *Graceful Degradation Tier*: When Google returns HTTP 429 / 503 (free-tier quota exhaustion or high demand), the backend captures the error cleanly, logs the event, serves a beautifully styled storybook vector illustration fallback, and displays an inline error state with a dedicated **Retry** button without corrupting previous completed milestones.
-- **Cost & Trade-Off**: Requires fallback generation routines in `GeminiRestClient.cs`, but guarantees 100% testability and zero crashes for reviewers regardless of their individual API key tier.
+  2. *Graceful Degradation Tier*: When Google returns HTTP 429 / 503 (free-tier quota exhaustion), the backend captures the error, logs it, returns an SVG fallback illustration, and surfaces an inline error state with a **Retry** button — without corrupting completed milestones.
+- **Cost & Trade-Off**: Requires maintaining fallback SVG generation routines alongside the live path, and reviewers using free-tier keys will only see placeholder art until they retry with quota available.
 
 ---
 
@@ -40,16 +42,19 @@
 - **What AI did wrong**: AI placed the duplicate-click guard in the frontend React state (`isSubmitting` flag in local component state).
 - **Why it was unsafe**: Client-side guards do not protect against page refreshes, requests from a second browser tab, or network latency spikes.
 - **What I did instead**: Built a server-side concurrency guard (`ProjectLockService`) backed by `SemaphoreSlim` and atomic database `StepState` tracking. If another call arrives while a step is running, the server rejects it with a `409 Conflict` and returns the existing in-flight state.
+- **Cost I accepted**: In-memory locks are single-instance only and add a `ConcurrentDictionary` that grows with project count without eviction.
 
 ### Override 2: Correcting Hard Pipeline Caps Server-Side
 - **What AI did wrong**: AI wrote prompt text asking Gemini for 2 characters and 1 chapter, but did not enforce the caps in code, assuming Gemini would always obey.
 - **Why it was unsafe**: LLMs frequently return extra entities (e.g., 4 characters or 3 chapters) despite prompt instructions, which would violate the assessment's cost constraints.
 - **What I did instead**: Added explicit LINQ `.Take(2)` and `.Take(1)` enforcement in `PipelineService.cs` and `GeminiRestClient.cs` to guarantee that database persistence and subsequent image generation loops never exceed 2 character portraits and 1 chapter illustration.
+- **Cost I accepted**: If the assessment caps change, the hard-coded `.Take(N)` values must be updated in two places — but a magic number beats a silent budget overrun.
 
 ### Override 3: Fixing Multimodal Image Context Chaining in Step 5
 - **What AI did wrong**: AI attempted to describe characters solely with text in Step 5 without passing the portrait image files.
 - **Why it was wrong**: The notebook specifically demonstrates using generated character portraits as multimodal visual references to maintain character visual consistency across scenes.
 - **What I did instead**: Implemented reading the local portrait PNG bytes, encoding them to Base64 `inlineData` parts, and attaching them alongside the chapter prompt in the Gemini REST payload.
+- **Cost I accepted**: Base64 encoding doubles the payload size per portrait (~200 KB each), increasing request latency by a few hundred milliseconds.
 
 ### Override 4: Enforcing Native .NET Options Pattern over Manual Config Parsers
 - **What AI did wrong**: AI wrote verbose file-reading loops, string splits, manual substring manipulations, and multiple imperative `PostConfigure` calls in `Program.cs` to map `.env` variables into `GeminiOptions`.
