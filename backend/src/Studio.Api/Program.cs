@@ -23,43 +23,11 @@ Log.Logger = new LoggerConfiguration()
         outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
+// 0. Load .env into Environment Variables before building Configuration
+DotNetEnv.Env.TraversePath().Load();
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog();
-
-// Load .env file from potential paths
-var potentialEnvPaths = new[]
-{
-    Path.Combine(builder.Environment.ContentRootPath, ".env"),
-    Path.Combine(Directory.GetCurrentDirectory(), ".env"),
-    Path.Combine(builder.Environment.ContentRootPath, "..", "..", "..", ".env"),
-    Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", ".env"),
-    Path.Combine(AppContext.BaseDirectory, ".env"),
-    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".env")
-};
-
-foreach (var envPath in potentialEnvPaths)
-{
-    if (File.Exists(envPath))
-    {
-        foreach (var line in File.ReadAllLines(envPath))
-        {
-            var trimmed = line.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#")) continue;
-            var parts = trimmed.Split('=', 2);
-            if (parts.Length == 2)
-            {
-                var key = parts[0].Trim();
-                var val = parts[1].Trim();
-                Environment.SetEnvironmentVariable(key, val);
-                if (key == "GEMINI_API_KEY")
-                {
-                    builder.Configuration["Gemini:ApiKey"] = val;
-                }
-            }
-        }
-        break;
-    }
-}
 
 // 1. Database & SQLite Directory
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=data/studio.db";
@@ -74,27 +42,8 @@ builder.Services.AddDbContext<StudioDbContext>(options =>
     options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning));
 });
 
-// 2. Options Configuration
+// 2. Options Configuration: Pure Native .NET Options Pattern
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
-
-// Allow environment variable override for API Key and Models
-var envApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-if (!string.IsNullOrWhiteSpace(envApiKey))
-{
-    builder.Services.PostConfigure<GeminiOptions>(opt => opt.ApiKey = envApiKey);
-}
-
-var envTextModel = Environment.GetEnvironmentVariable("GEMINI_TEXT_MODEL");
-if (!string.IsNullOrWhiteSpace(envTextModel))
-{
-    builder.Services.PostConfigure<GeminiOptions>(opt => opt.TextModel = envTextModel);
-}
-
-var envImageModel = Environment.GetEnvironmentVariable("GEMINI_IMAGE_MODEL");
-if (!string.IsNullOrWhiteSpace(envImageModel))
-{
-    builder.Services.PostConfigure<GeminiOptions>(opt => opt.ImageModel = envImageModel);
-}
 
 // 3. Infrastructure & Services
 builder.Services.AddHttpClient<IGeminiClient, GeminiRestClient>((sp, client) =>
