@@ -15,8 +15,9 @@
 Copy `.env.example` to `.env` or configure your key in `backend/src/Studio.Api/appsettings.json`:
 ```bash
 cp .env.example .env
-# Set your key: GEMINI_API_KEY=your_actual_key_here
+# Set your key in .env: Gemini__ApiKey=your_actual_key_here
 ```
+
 
 > [!NOTE]
 > **Important Note for Reviewers Regarding Gemini API Keys & Rate Limits**:
@@ -79,8 +80,10 @@ The application follows the 5-step pipeline specified in the Google Gemini Book 
 
 ## 4. Documentation Index
 
-- [DECISIONS.md](file:///d:/Apply/book-illustration-studio/DECISIONS.md) — 5 core technical decisions, trade-offs, 3 AI pushback callouts, and next-day roadmap.
+- [DECISIONS.md](file:///d:/Apply/book-illustration-studio/DECISIONS.md) — 6 core technical decisions, trade-offs, 4 AI pushback callouts, and next-day roadmap.
 - [TESTING.md](file:///d:/Apply/book-illustration-studio/TESTING.md) — Testing strategy and actual raw test execution reports.
 - [AGENTS.md](file:///d:/Apply/book-illustration-studio/AGENTS.md) — AI Copilot guidelines and commit conventions.
 - [docs/plan.md](file:///d:/Apply/book-illustration-studio/docs/plan.md) — 3-shift project implementation plan.
 - [docs/architecture.md](file:///d:/Apply/book-illustration-studio/docs/architecture.md) — Mermaid pipeline, state machine, and concurrency diagrams.
+- [docs/ai-prompts.md](file:///d:/Apply/book-illustration-studio/docs/ai-prompts.md) — Prompt logs, agent configuration, and custom skills documentation.
+

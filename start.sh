@@ -5,6 +5,12 @@ echo "=========================================="
 echo "Starting Book Illustration Studio..."
 echo "=========================================="
 
+# 0. Auto-install frontend dependencies if not present
+if [ ! -d "frontend/node_modules" ]; then
+    echo "-> Installing frontend dependencies (first-time run)..."
+    npm --prefix frontend install
+fi
+
 # 1. Start Backend in background
 echo "-> Launching .NET 8 Backend API on http://localhost:5000..."
 dotnet run --project backend/src/Studio.Api/Studio.Api.csproj --urls "http://localhost:5000" &
@@ -19,3 +25,4 @@ trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null" EXIT
 
 echo "App running. Press Ctrl+C to stop."
 wait
+
