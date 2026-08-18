@@ -64,7 +64,6 @@ stateDiagram-v2
 | `CHARACTERS_GENERATED` | `RUNNING` | Step 3 in-flight. Show spinner + poll for portraits. |
 | `CHARACTERS_GENERATED` | `FAILED` | Step 3 failed. Show error + Retry button. |
 | `CHARACTERS_GENERATED` | `RUNNING` + stale `StepStartedAt` | Step 3 stuck (server died). Show recovery affordance. |
-```
 
 
 ---
