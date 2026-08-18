@@ -242,7 +242,7 @@ public class GeminiRestClient : IGeminiClient
     private async Task<string> CallTextModelAsync(GeminiGenerateRequest request, CancellationToken ct)
     {
         var configured = string.IsNullOrWhiteSpace(_options.TextModel) ? "gemini-2.5-flash" : _options.TextModel;
-        var candidateModels = new[] { configured, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.7-flash" }
+        var candidateModels = new[] { configured, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash" }
             .Distinct()
             .ToList();
 

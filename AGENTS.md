@@ -51,6 +51,6 @@ All commit messages must follow the project standard:
 - All AI overrides, design trade-offs, and critical decisions must be documented in `DECISIONS.md`.
 
 ### 3.5 Two-Tier Resilience & Fallback Handling
-- Prioritize live Gemini REST endpoints (`gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-3.7-flash`).
+- Prioritize live Gemini REST endpoints (`gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-flash`).
 - When encountering HTTP 429 (`RESOURCE_EXHAUSTED` / `Prepay credits depleted`) or 503 (`ServiceUnavailable`), degrade gracefully with inline error state, Retry affordance, and fallback storybook illustrations without crashing or losing completed milestones.
 - Ensure the full test suite remains 100% mocked and executable with zero API quota consumption.

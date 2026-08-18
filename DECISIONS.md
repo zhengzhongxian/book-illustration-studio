@@ -28,7 +28,7 @@
 ### Decision 6: Two-Tier Architecture for Live Gemini API & Graceful Degradation
 - **Context & Proposal**: AI initially proposed crashing or bubbling up raw HTTP 429 exceptions to the frontend whenever Google AI Studio rate-limits or returns `RESOURCE_EXHAUSTED` / `Prepay credits depleted`.
 - **Pushback & Resolution**: I pushed back. In a real-world production system, third-party API rate limits and regional billing tier quirks are inevitable. We architected a resilient two-tier design:
-  1. *Live Tier*: Calls Google's official endpoints directly with current model candidates (`gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-3.7-flash`). If provided with a billing-enabled key, live AI outputs are generated.
+  1. *Live Tier*: Calls Google's official endpoints directly with current model candidates (`gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-flash`). If provided with a billing-enabled key, live AI outputs are generated.
   2. *Graceful Degradation Tier*: When Google returns HTTP 429 / 503 (free-tier quota exhaustion or high demand), the backend captures the error cleanly, logs the event, serves a beautifully styled storybook vector illustration fallback, and displays an inline error state with a dedicated **Retry** button without corrupting previous completed milestones.
 - **Cost & Trade-Off**: Requires fallback generation routines in `GeminiRestClient.cs`, but guarantees 100% testability and zero crashes for reviewers regardless of their individual API key tier.
 
