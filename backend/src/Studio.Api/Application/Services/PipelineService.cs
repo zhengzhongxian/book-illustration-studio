@@ -58,6 +58,7 @@ public class PipelineService : IPipelineService
             ValidateStepPrerequisites(project, step);
 
             // 3. Mark in-progress
+            _logger.LogInformation("--> [Pipeline] Starting Step '{Step}' for Project '{Title}' (Id: {ProjectId})", step, project.Title, project.Id);
             project.StepState = StepState.RUNNING;
             project.StepStartedAt = DateTime.UtcNow;
             project.LastError = null;
@@ -89,10 +90,12 @@ public class PipelineService : IPipelineService
                 project.LastError = null;
                 project.UpdatedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync(ct);
+
+                _logger.LogInformation("<-- [Pipeline] Step '{Step}' completed successfully for Project '{Title}'. Milestone: {Status}", step, project.Title, project.Status);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Step {Step} failed for project {ProjectId}", step, projectId);
+                _logger.LogError(ex, "XXX [Pipeline] Step '{Step}' failed for Project '{Title}' ({ProjectId}): {Error}", step, project.Title, projectId, ex.Message);
                 project.StepState = StepState.FAILED;
                 project.LastError = ex.Message;
                 project.UpdatedAt = DateTime.UtcNow;
@@ -103,6 +106,7 @@ public class PipelineService : IPipelineService
             return ProjectService.MapToDetailDto(project);
         }
     }
+
 
     public async Task<ProjectDetailDto> ResetStuckStepAsync(string projectId, CancellationToken ct = default)
     {
@@ -166,10 +170,13 @@ public class PipelineService : IPipelineService
         if (!string.IsNullOrWhiteSpace(customStyle))
         {
             styleText = $"{customStyle.Trim()} (as specified — keep this style consistent for all subsequent prompts).";
+            _logger.LogInformation("[Pipeline:Style] Using user-specified custom style: {Style}", styleText);
         }
         else
         {
+            _logger.LogInformation("[Pipeline:Style] Requesting Gemini to auto-generate art style from book text...");
             styleText = await _gemini.GenerateStyleAsync(project.BookText, ct);
+            _logger.LogInformation("[Pipeline:Style] Generated art style: {Style}", styleText);
         }
 
         project.Style = styleText;
@@ -179,6 +186,7 @@ public class PipelineService : IPipelineService
     private async Task RunCharactersStepAsync(Project project, CancellationToken ct)
     {
         var style = project.Style ?? "Storybook illustration";
+        _logger.LogInformation("[Pipeline:Characters] Extracting adult characters with style '{Style}'...", style);
         var characters = await _gemini.ExtractCharactersAsync(project.BookText, style, ct);
 
         if (!characters.Any())
@@ -206,15 +214,20 @@ public class PipelineService : IPipelineService
             });
         }
 
+        _logger.LogInformation("[Pipeline:Characters] Extracted {Count} adult characters (Cap: 2): {Names}",
+            project.Characters.Count, string.Join(", ", project.Characters.Select(c => c.Name)));
+
         project.Status = ProjectStatus.CHARACTERS_GENERATED;
     }
 
     private async Task RunPortraitsStepAsync(Project project, CancellationToken ct)
     {
         var style = project.Style ?? "Storybook illustration";
+        _logger.LogInformation("[Pipeline:Portraits] Generating {Count} portrait images (9:16)...", project.Characters.Count);
 
         foreach (var character in project.Characters.OrderBy(c => c.SortOrder))
         {
+            _logger.LogInformation("[Pipeline:Portraits] Generating portrait for '{Name}'...", character.Name);
             var (base64, mimeType) = await _gemini.GeneratePortraitImageAsync(character.Name, character.Prompt, style, ct);
             var relativePath = await _storage.SaveImageBase64Async("portraits", character.Id, base64, mimeType);
 
@@ -223,6 +236,7 @@ public class PipelineService : IPipelineService
 
             // Save incremental progress so portraits reveal progressively
             await _db.SaveChangesAsync(ct);
+            _logger.LogInformation("[Pipeline:Portraits] Portrait ready for '{Name}': {Path}", character.Name, relativePath);
         }
 
         project.Status = ProjectStatus.PORTRAITS_GENERATED;
@@ -233,6 +247,7 @@ public class PipelineService : IPipelineService
         var style = project.Style ?? "Storybook illustration";
         var charList = project.Characters.Select(c => new ExtractedCharacter(c.Name, c.Prompt)).ToList();
 
+        _logger.LogInformation("[Pipeline:Chapters] Extracting chapter scenes referencing {CharCount} characters...", charList.Count);
         var chapters = await _gemini.ExtractChaptersAsync(project.BookText, style, charList, ct);
         if (!chapters.Any())
         {
@@ -262,6 +277,7 @@ public class PipelineService : IPipelineService
             });
         }
 
+        _logger.LogInformation("[Pipeline:Chapters] Extracted chapter: '{Name}' (Cap: 1)", project.Chapters.FirstOrDefault()?.Name);
         project.Status = ProjectStatus.CHAPTERS_GENERATED;
     }
 
@@ -283,8 +299,11 @@ public class PipelineService : IPipelineService
             }
         }
 
+        _logger.LogInformation("[Pipeline:Illustrations] Generating scene illustrations (16:10) with {RefCount} character reference image(s)...", refImages.Count);
+
         foreach (var chapter in project.Chapters.OrderBy(c => c.SortOrder))
         {
+            _logger.LogInformation("[Pipeline:Illustrations] Generating illustration for '{Chapter}'...", chapter.Name);
             var (base64, mimeType) = await _gemini.GenerateChapterIllustrationAsync(
                 chapter.Name,
                 chapter.Prompt,
@@ -298,8 +317,10 @@ public class PipelineService : IPipelineService
             chapter.IllustrationReady = true;
 
             await _db.SaveChangesAsync(ct);
+            _logger.LogInformation("[Pipeline:Illustrations] Illustration ready for '{Chapter}': {Path}", chapter.Name, relativePath);
         }
 
         project.Status = ProjectStatus.DONE;
     }
+
 }

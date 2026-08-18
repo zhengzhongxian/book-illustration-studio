@@ -257,6 +257,7 @@ public class GeminiRestClient : IGeminiClient
 
             try
             {
+                _logger.LogInformation("[Gemini:Text] POST {Url} (Model: {Model})...", $"{_options.BaseUrl}models/{model}:generateContent", model);
                 var response = await _httpClient.PostAsync(url, content, ct);
                 var respContent = await response.Content.ReadAsStringAsync(ct);
 
@@ -267,9 +268,11 @@ public class GeminiRestClient : IGeminiClient
 
                     if (!string.IsNullOrWhiteSpace(text))
                     {
+                        _logger.LogInformation("[Gemini:Text] Received successful response from model '{Model}' ({Length} chars)", model, text.Length);
                         return text;
                     }
                 }
+
 
                 lastError = ExtractErrorMessage(respContent);
                 lastStatusCode = (int)response.StatusCode;
@@ -316,6 +319,7 @@ public class GeminiRestClient : IGeminiClient
 
             try
             {
+                _logger.LogInformation("[Gemini:Image] POST {Url} (Model: {Model})...", $"{_options.BaseUrl}models/{model}:generateContent", model);
                 var response = await _httpClient.PostAsync(url, content, ct);
                 var respContent = await response.Content.ReadAsStringAsync(ct);
 
@@ -326,9 +330,11 @@ public class GeminiRestClient : IGeminiClient
 
                     if (inlineData != null && !string.IsNullOrWhiteSpace(inlineData.Data))
                     {
+                        _logger.LogInformation("[Gemini:Image] Received successful image generation from model '{Model}'", model);
                         return (inlineData.Data, inlineData.MimeType ?? "image/png");
                     }
                 }
+
 
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound || respContent.Contains("no longer available"))
                 {
