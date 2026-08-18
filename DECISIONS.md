@@ -51,6 +51,11 @@
 - **Why it was wrong**: The notebook specifically demonstrates using generated character portraits as multimodal visual references to maintain character visual consistency across scenes.
 - **What I did instead**: Implemented reading the local portrait PNG bytes, encoding them to Base64 `inlineData` parts, and attaching them alongside the chapter prompt in the Gemini REST payload.
 
+### Override 4: Enforcing Native .NET Options Pattern over Manual Config Parsers
+- **What AI did wrong**: AI wrote verbose file-reading loops, string splits, manual substring manipulations, and multiple imperative `PostConfigure` calls in `Program.cs` to map `.env` variables into `GeminiOptions`.
+- **Why it was overcomplicated**: It reinvented the wheel, cluttered application bootstrapping, and was brittle when introducing new configuration properties.
+- **What I did instead**: I pushed back on the AI and instructed it to adopt the official .NET Options Pattern standard with `DotNetEnv` and hierarchical double-underscore naming (`Gemini__ApiKey`, `Gemini__TextModel`). By calling `DotNetEnv.Env.TraversePath().Load()`, `WebApplication.CreateBuilder(args)` natively binds environment variables into `GeminiOptions` automatically with zero manual boilerplate.
+
 ---
 
 ## 3. If I Had One More Day: What I Would Build Next & Why
