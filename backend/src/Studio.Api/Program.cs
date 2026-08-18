@@ -77,11 +77,23 @@ builder.Services.AddDbContext<StudioDbContext>(options =>
 // 2. Options Configuration
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
 
-// Allow environment variable override for API Key
+// Allow environment variable override for API Key and Models
 var envApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
 if (!string.IsNullOrWhiteSpace(envApiKey))
 {
     builder.Services.PostConfigure<GeminiOptions>(opt => opt.ApiKey = envApiKey);
+}
+
+var envTextModel = Environment.GetEnvironmentVariable("GEMINI_TEXT_MODEL");
+if (!string.IsNullOrWhiteSpace(envTextModel))
+{
+    builder.Services.PostConfigure<GeminiOptions>(opt => opt.TextModel = envTextModel);
+}
+
+var envImageModel = Environment.GetEnvironmentVariable("GEMINI_IMAGE_MODEL");
+if (!string.IsNullOrWhiteSpace(envImageModel))
+{
+    builder.Services.PostConfigure<GeminiOptions>(opt => opt.ImageModel = envImageModel);
 }
 
 // 3. Infrastructure & Services
